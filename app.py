@@ -32,7 +32,6 @@ DEFAULT_SYMBOLS = [
     "DX-Y.NYB", "BTC=F", "ETH=F", "ZB=F"
 ]
 
-
 uploaded_file = st.sidebar.file_uploader(
     "📁 Carica file TXT con simboli",
     type=["txt"]
@@ -69,7 +68,7 @@ def fetch_data(symbol):
     if df is None or df.empty:
         return None
 
-    # 🔥 FIX CRITICO: appiattisce MultiIndex
+    # 🔥 FIX MULTIINDEX
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
@@ -147,17 +146,21 @@ bullish = [r for r in results if "Rialzista" in r["Segnale"]]
 bearish = [r for r in results if "Ribassista" in r["Segnale"]]
 
 # --------------------------------------------------
-# TABLES
+# TABLES (date senza orario)
 # --------------------------------------------------
 st.subheader("🟢 Breakout Rialzisti")
 if bullish:
-    st.dataframe(pd.DataFrame(bullish)[["Symbol","Close","Upper","Data"]], use_container_width=True)
+    df_bull = pd.DataFrame(bullish)[["Symbol","Close","Upper","Data"]].copy()
+    df_bull["Data"] = df_bull["Data"].dt.strftime("%d/%m/%Y")
+    st.dataframe(df_bull, use_container_width=True)
 else:
     st.info("Nessun breakout rialzista")
 
 st.subheader("🔴 Breakout Ribassisti")
 if bearish:
-    st.dataframe(pd.DataFrame(bearish)[["Symbol","Close","Lower","Data"]], use_container_width=True)
+    df_bear = pd.DataFrame(bearish)[["Symbol","Close","Lower","Data"]].copy()
+    df_bear["Data"] = df_bear["Data"].dt.strftime("%d/%m/%Y")
+    st.dataframe(df_bear, use_container_width=True)
 else:
     st.info("Nessun breakout ribassista")
 
