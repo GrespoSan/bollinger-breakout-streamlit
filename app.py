@@ -45,17 +45,18 @@ bb_period = st.sidebar.number_input("Periodo Bollinger", 10, 50, 20)
 bb_std = st.sidebar.number_input("Deviazioni Standard", 1.0, 3.0, 2.0, step=0.1)
 
 # --------------------------------------------------
-# DATA FETCH
+# DATA FETCH (FIX MULTIINDEX)
 # --------------------------------------------------
 @st.cache_data
 def fetch_data(symbol):
     end = date.today() + timedelta(days=1)
-    start = end - timedelta(days=180)
+    start = end - timedelta(days=200)
 
     df = yf.download(
         symbol,
         start=start,
         end=end,
+        group_by="column",
         auto_adjust=False,
         progress=False
     )
@@ -63,12 +64,26 @@ def fetch_data(symbol):
     if df is None or df.empty:
         return None
 
-    # 🔒 FIX CRITICO: forza OHLC a float
-    df = df.copy()
-    df.index = pd.to_datetime(df.index)
+    # 🔥 FIX CRITICO: appiattisce MultiIndex
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
 
+    df = df.rename(columns={
+        "Open": "Open",
+        "High": "High",
+        "Low": "Low",
+        "Close": "Close",
+        "Volume": "Volume"
+    })
+
+    df = df[["Open", "High", "Low", "Close", "Volume"]]
+    df = df.dropna()
+
+    # 🔒 Forza tipi corretti
     for col in ["Open", "High", "Low", "Close"]:
         df[col] = df[col].astype(float)
+
+    df.index = pd.to_datetime(df.index)
 
     return df
 
@@ -85,6 +100,7 @@ def analyze_stock(symbol):
     data["Upper"] = data["MA"] + bb_std * data["STD"]
     data["Lower"] = data["MA"] - bb_std * data["STD"]
 
+    # Candela di IERI
     candle = data.iloc[-2]
 
     close = float(candle["Close"])
@@ -129,13 +145,19 @@ bearish = [r for r in results if "Ribassista" in r["Segnale"]]
 # TABLES
 # --------------------------------------------------
 st.subheader("🟢 Breakout Rialzisti")
-st.dataframe(pd.DataFrame(bullish)[["Symbol","Close","Upper","Data"]], use_container_width=True)
+if bullish:
+    st.dataframe(pd.DataFrame(bullish)[["Symbol","Close","Upper","Data"]], use_container_width=True)
+else:
+    st.info("Nessun breakout rialzista")
 
 st.subheader("🔴 Breakout Ribassisti")
-st.dataframe(pd.DataFrame(bearish)[["Symbol","Close","Lower","Data"]], use_container_width=True)
+if bearish:
+    st.dataframe(pd.DataFrame(bearish)[["Symbol","Close","Lower","Data"]], use_container_width=True)
+else:
+    st.info("Nessun breakout ribassista")
 
 # --------------------------------------------------
-# CHART (CANDELE FIXATE)
+# CHART (CANDELE GARANTITE)
 # --------------------------------------------------
 st.divider()
 st.subheader("📈 Grafico con Candele e Bollinger")
@@ -152,33 +174,32 @@ if selectable:
 
     fig = go.Figure()
 
-    # 🔥 CANDELE (FIX DEFINITIVO)
     fig.add_trace(go.Candlestick(
         x=d.index,
-        open=d["Open"].values,
-        high=d["High"].values,
-        low=d["Low"].values,
-        close=d["Close"].values,
+        open=d["Open"].to_numpy(),
+        high=d["High"].to_numpy(),
+        low=d["Low"].to_numpy(),
+        close=d["Close"].to_numpy(),
         name="Prezzo"
     ))
 
     fig.add_trace(go.Scatter(
         x=d.index,
-        y=d["Upper"].values,
+        y=d["Upper"].to_numpy(),
         name="Banda Superiore",
         line=dict(dash="dash")
     ))
 
     fig.add_trace(go.Scatter(
         x=d.index,
-        y=d["Lower"].values,
+        y=d["Lower"].to_numpy(),
         name="Banda Inferiore",
         line=dict(dash="dash")
     ))
 
     fig.add_trace(go.Scatter(
         x=d.index,
-        y=d["MA"].values,
+        y=d["MA"].to_numpy(),
         name="Media",
         line=dict(color="gray")
     ))
