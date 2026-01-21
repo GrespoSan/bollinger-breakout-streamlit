@@ -23,10 +23,15 @@ st.markdown("**Segnali basati ESCLUSIVAMENTE sulla candela DAILY di IERI (chiusa
 st.sidebar.header("⚙️ Configurazione")
 
 DEFAULT_SYMBOLS = [
-    "AAPL","MSFT","NVDA","META","GOOGL","AMZN","TSLA","NFLX",
-    "AMD","INTC","CRM","ORCL","ADBE","JPM","BAC","GS","XOM",
-    "CVX","KO","PEP","DIS","WMT","COST","SPY","QQQ","IWM"
+    "NQ=F", "ES=F", "YM=F", "RTY=F",
+    "^GDAXI", "^STOXX50E",
+    "CL=F", "RB=F", "NG=F", "GC=F", "SI=F", "HG=F", "PL=F", "PA=F",
+    "ZC=F", "ZS=F", "ZW=F", "ZO=F", "ZR=F", "KC=F", "CC=F", "CT=F",
+    "SB=F", "OJ=F",
+    "6E=F", "6B=F", "6A=F", "6N=F", "6S=F", "6J=F", "6M=F",
+    "DX-Y.NYB", "BTC=F", "ETH=F", "ZB=F"
 ]
+
 
 uploaded_file = st.sidebar.file_uploader(
     "📁 Carica file TXT con simboli",
