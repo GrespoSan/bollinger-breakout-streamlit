@@ -44,8 +44,6 @@ st.sidebar.divider()
 bb_period = st.sidebar.number_input("Periodo Bollinger", 10, 50, 20)
 bb_std = st.sidebar.number_input("Deviazioni Standard", 1.0, 3.0, 2.0, step=0.1)
 
-st.sidebar.info("📌 Il segnale è valido SOLO se la candela di IERI ha chiuso fuori banda")
-
 # --------------------------------------------------
 # DATA FETCH
 # --------------------------------------------------
@@ -53,10 +51,26 @@ st.sidebar.info("📌 Il segnale è valido SOLO se la candela di IERI ha chiuso 
 def fetch_data(symbol):
     end = date.today() + timedelta(days=1)
     start = end - timedelta(days=180)
-    data = yf.download(symbol, start=start, end=end, progress=False)
-    if data is None or data.empty:
+
+    df = yf.download(
+        symbol,
+        start=start,
+        end=end,
+        auto_adjust=False,
+        progress=False
+    )
+
+    if df is None or df.empty:
         return None
-    return data
+
+    # 🔒 FIX CRITICO: forza OHLC a float
+    df = df.copy()
+    df.index = pd.to_datetime(df.index)
+
+    for col in ["Open", "High", "Low", "Close"]:
+        df[col] = df[col].astype(float)
+
+    return df
 
 # --------------------------------------------------
 # ANALYSIS
@@ -66,14 +80,11 @@ def analyze_stock(symbol):
     if data is None or len(data) < bb_period + 2:
         return None
 
-    data = data.dropna()
-
     data["MA"] = data["Close"].rolling(bb_period).mean()
     data["STD"] = data["Close"].rolling(bb_period).std()
     data["Upper"] = data["MA"] + bb_std * data["STD"]
     data["Lower"] = data["MA"] - bb_std * data["STD"]
 
-    # Candela di IERI (penultima)
     candle = data.iloc[-2]
 
     close = float(candle["Close"])
@@ -104,106 +115,86 @@ def analyze_stock(symbol):
 # --------------------------------------------------
 # RUN SCANNER
 # --------------------------------------------------
-if symbols:
-    with st.spinner(f"Analisi di {len(symbols)} titoli..."):
-        results = []
-        for s in symbols:
-            r = analyze_stock(s)
-            if r:
-                results.append(r)
+results = []
+with st.spinner("Analisi in corso..."):
+    for s in symbols:
+        r = analyze_stock(s)
+        if r:
+            results.append(r)
 
-    bullish = [r for r in results if "Rialzista" in r["Segnale"]]
-    bearish = [r for r in results if "Ribassista" in r["Segnale"]]
-
-    # --------------------------------------------------
-    # RIALZISTI
-    # --------------------------------------------------
-    st.subheader("🟢 Breakout RIALZISTI (Close > Banda Superiore – IERI)")
-
-    if bullish:
-        df_bull = pd.DataFrame([{
-            "Simbolo": r["Symbol"],
-            "Close": round(r["Close"], 2),
-            "Banda Superiore": round(r["Upper"], 2),
-            "Data Segnale": r["Data"].strftime("%d/%m/%Y")
-        } for r in bullish])
-
-        st.dataframe(df_bull, use_container_width=True)
-    else:
-        st.info("Nessun breakout rialzista trovato")
-
-    # --------------------------------------------------
-    # RIBASSISTI
-    # --------------------------------------------------
-    st.subheader("🔴 Breakout RIBASSISTI (Close < Banda Inferiore – IERI)")
-
-    if bearish:
-        df_bear = pd.DataFrame([{
-            "Simbolo": r["Symbol"],
-            "Close": round(r["Close"], 2),
-            "Banda Inferiore": round(r["Lower"], 2),
-            "Data Segnale": r["Data"].strftime("%d/%m/%Y")
-        } for r in bearish])
-
-        st.dataframe(df_bear, use_container_width=True)
-    else:
-        st.info("Nessun breakout ribassista trovato")
-
-    # --------------------------------------------------
-    # CHART
-    # --------------------------------------------------
-    st.divider()
-    st.subheader("📈 Grafico con Bollinger Bands")
-
-    selectable = bullish + bearish
-    if selectable:
-        selected = st.selectbox(
-            "Seleziona un titolo",
-            [r["Symbol"] for r in selectable]
-        )
-
-        sel = next(r for r in selectable if r["Symbol"] == selected)
-        d = sel["DataFrame"]
-
-        fig = go.Figure()
-
-        fig.add_trace(go.Candlestick(
-            x=d.index,
-            open=d["Open"],
-            high=d["High"],
-            low=d["Low"],
-            close=d["Close"],
-            name="Prezzo"
-        ))
-
-        fig.add_trace(go.Scatter(x=d.index, y=d["Upper"], name="Banda Superiore", line=dict(dash="dash")))
-        fig.add_trace(go.Scatter(x=d.index, y=d["Lower"], name="Banda Inferiore", line=dict(dash="dash")))
-        fig.add_trace(go.Scatter(x=d.index, y=d["MA"], name="Media", line=dict(color="gray")))
-
-        fig.add_vline(x=sel["Data"], line_color="orange", line_dash="dot")
-
-        fig.update_layout(
-            title=f"{selected} – {sel['Segnale']} ({sel['Data'].strftime('%d/%m/%Y')})",
-            xaxis_title="Data",
-            yaxis_title="Prezzo",
-            height=600
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
+bullish = [r for r in results if "Rialzista" in r["Segnale"]]
+bearish = [r for r in results if "Ribassista" in r["Segnale"]]
 
 # --------------------------------------------------
-# INFO
+# TABLES
 # --------------------------------------------------
-with st.expander("ℹ️ Logica del Segnale"):
-    st.markdown("""
-    **Breakout Rialzista**
-    - Close DAILY di ieri > Banda Superiore
+st.subheader("🟢 Breakout Rialzisti")
+st.dataframe(pd.DataFrame(bullish)[["Symbol","Close","Upper","Data"]], use_container_width=True)
 
-    **Breakout Ribassista**
-    - Close DAILY di ieri < Banda Inferiore
+st.subheader("🔴 Breakout Ribassisti")
+st.dataframe(pd.DataFrame(bearish)[["Symbol","Close","Lower","Data"]], use_container_width=True)
 
-    **Note**
-    - Nessun dato intraday
-    - Nessun repaint
-    - Ideale per swing / position trading
-    """)
+# --------------------------------------------------
+# CHART (CANDELE FIXATE)
+# --------------------------------------------------
+st.divider()
+st.subheader("📈 Grafico con Candele e Bollinger")
+
+selectable = bullish + bearish
+if selectable:
+    selected = st.selectbox(
+        "Seleziona un titolo",
+        [r["Symbol"] for r in selectable]
+    )
+
+    sel = next(r for r in selectable if r["Symbol"] == selected)
+    d = sel["DataFrame"]
+
+    fig = go.Figure()
+
+    # 🔥 CANDELE (FIX DEFINITIVO)
+    fig.add_trace(go.Candlestick(
+        x=d.index,
+        open=d["Open"].values,
+        high=d["High"].values,
+        low=d["Low"].values,
+        close=d["Close"].values,
+        name="Prezzo"
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=d.index,
+        y=d["Upper"].values,
+        name="Banda Superiore",
+        line=dict(dash="dash")
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=d.index,
+        y=d["Lower"].values,
+        name="Banda Inferiore",
+        line=dict(dash="dash")
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=d.index,
+        y=d["MA"].values,
+        name="Media",
+        line=dict(color="gray")
+    ))
+
+    fig.add_vline(
+        x=sel["Data"],
+        line_dash="dot",
+        line_color="orange"
+    )
+
+    fig.update_layout(
+        title=f"{selected} – {sel['Segnale']} ({sel['Data'].strftime('%d/%m/%Y')})",
+        xaxis_title="Data",
+        yaxis_title="Prezzo",
+        height=600,
+        xaxis_rangeslider_visible=False
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
