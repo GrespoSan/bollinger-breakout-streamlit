@@ -4,10 +4,9 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from datetime import date, timedelta
-import io
 
 # --------------------------------------------------
-# CONFIG
+# PAGE CONFIG
 # --------------------------------------------------
 st.set_page_config(
     page_title="Bollinger Breakout Scanner",
@@ -15,8 +14,8 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("📊 Bollinger Bands Breakout Scanner (Daily)")
-st.markdown("**Segnali basati ESCLUSIVAMENTE sulla candela di ieri (chiusa)**")
+st.title("📊 Bollinger Bands Breakout Scanner")
+st.markdown("**Segnali basati ESCLUSIVAMENTE sulla candela DAILY di IERI (chiusa)**")
 
 # --------------------------------------------------
 # SIDEBAR
@@ -55,7 +54,9 @@ def fetch_data(symbol):
     end = date.today() + timedelta(days=1)
     start = end - timedelta(days=180)
     data = yf.download(symbol, start=start, end=end, progress=False)
-    return data if not data.empty else None
+    if data is None or data.empty:
+        return None
+    return data
 
 # --------------------------------------------------
 # ANALYSIS
@@ -72,13 +73,16 @@ def analyze_stock(symbol):
     data["Upper"] = data["MA"] + bb_std * data["STD"]
     data["Lower"] = data["MA"] - bb_std * data["STD"]
 
-    # 👉 Candela di IERI
+    # Candela di IERI (penultima)
     candle = data.iloc[-2]
 
-    close = candle["Close"]
-    upper = candle["Upper"]
-    lower = candle["Lower"]
+    close = float(candle["Close"])
+    upper = float(candle["Upper"])
+    lower = float(candle["Lower"])
     signal_date = candle.name
+
+    if np.isnan(close) or np.isnan(upper) or np.isnan(lower):
+        return None
 
     if close > upper:
         signal = "🟢 Breakout Rialzista"
@@ -98,7 +102,7 @@ def analyze_stock(symbol):
     }
 
 # --------------------------------------------------
-# RUN SCAN
+# RUN SCANNER
 # --------------------------------------------------
 if symbols:
     with st.spinner(f"Analisi di {len(symbols)} titoli..."):
@@ -114,7 +118,7 @@ if symbols:
     # --------------------------------------------------
     # RIALZISTI
     # --------------------------------------------------
-    st.subheader("🟢 BREAKOUT RIALZISTI (Close > Banda Superiore – IERI)")
+    st.subheader("🟢 Breakout RIALZISTI (Close > Banda Superiore – IERI)")
 
     if bullish:
         df_bull = pd.DataFrame([{
@@ -125,14 +129,13 @@ if symbols:
         } for r in bullish])
 
         st.dataframe(df_bull, use_container_width=True)
-
     else:
         st.info("Nessun breakout rialzista trovato")
 
     # --------------------------------------------------
     # RIBASSISTI
     # --------------------------------------------------
-    st.subheader("🔴 BREAKOUT RIBASSISTI (Close < Banda Inferiore – IERI)")
+    st.subheader("🔴 Breakout RIBASSISTI (Close < Banda Inferiore – IERI)")
 
     if bearish:
         df_bear = pd.DataFrame([{
@@ -143,15 +146,14 @@ if symbols:
         } for r in bearish])
 
         st.dataframe(df_bear, use_container_width=True)
-
     else:
         st.info("Nessun breakout ribassista trovato")
 
     # --------------------------------------------------
-    # GRAFICO
+    # CHART
     # --------------------------------------------------
     st.divider()
-    st.subheader("📈 Grafico Dettagliato con Bollinger")
+    st.subheader("📈 Grafico con Bollinger Bands")
 
     selectable = bullish + bearish
     if selectable:
@@ -195,13 +197,13 @@ if symbols:
 with st.expander("ℹ️ Logica del Segnale"):
     st.markdown("""
     **Breakout Rialzista**
-    - Close di **IERI** > Banda Superiore
+    - Close DAILY di ieri > Banda Superiore
 
     **Breakout Ribassista**
-    - Close di **IERI** < Banda Inferiore
+    - Close DAILY di ieri < Banda Inferiore
 
-    **Bollinger Bands**
-    - Media mobile semplice
-    - Periodo e deviazioni configurabili
-    - Nessun utilizzo di dati intraday
+    **Note**
+    - Nessun dato intraday
+    - Nessun repaint
+    - Ideale per swing / position trading
     """)
