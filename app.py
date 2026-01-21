@@ -14,7 +14,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("📊 Bollinger Bands Breakout Scanner")
+st.title("📊 Bollinger Bands Exit Band Scanner")
 st.markdown("**Segnali basati ESCLUSIVAMENTE sulla candela DAILY di IERI (chiusa)**")
 
 # --------------------------------------------------
